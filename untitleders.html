@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Racing City Sound Fix</title>
+<style>
+body{margin:0;overflow:hidden;background:black;text-align:center;color:white;font-family:Arial;}
+#menu{position:absolute;width:100%;top:35%;}
+button{padding:12px 20px;font-size:16px;border:none;border-radius:20px;margin:5px;background:cyan;}
+canvas{display:none;margin:auto;border:4px solid cyan;background:black;}
+#controls{display:none;position:absolute;bottom:20px;width:100%;text-align:center;}
+.ctrl{width:80px;height:80px;border-radius:50%;border:none;font-size:30px;margin:10px;background:cyan;}
+</style>
+</head>
+<body>
+
+<div id="menu">
+<h1>🏎️ Racing City Sound</h1>
+<button onclick="startGame('day')">☀️ Siang</button>
+<button onclick="startGame('night')">🌙 Malam</button>
+</div>
+
+<canvas id="game" width="400" height="600"></canvas>
+
+<div id="controls">
+<button class="ctrl" id="leftBtn">⬅️</button>
+<button class="ctrl" id="rightBtn">➡️</button>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let mode="day";
+let player, obstacles, speed, score, level, gameOver;
+let moveLeft=false, moveRight=false;
+let nitro=false;
+let animationId=null;
+
+/* SOUND */
+const bgMusic=new Audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
+bgMusic.loop=true;
+bgMusic.volume=0.3;
+
+const engineSound=new Audio("https://www.soundjay.com/transportation/sounds/car-engine-1.mp3");
+engineSound.loop=true;
+engineSound.volume=0.3;
+
+const nitroSound=new Audio("https://www.soundjay.com/button/sounds/button-09.mp3");
+nitroSound.volume=0.5;
+
+const crashSound=new Audio("https://www.soundjay.com/mechanical/sounds/crash-01.mp3");
+
+/* CONTROL */
+document.addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft") moveLeft=true;
+ if(e.key==="ArrowRight") moveRight=true;
+
+ if(e.key===" " && !nitro){
+   nitro=true;
+   nitroSound.currentTime=0;
+   nitroSound.play();
+ }
+});
+
+document.addEventListener("keyup",e=>{
+ if(e.key==="ArrowLeft") moveLeft=false;
+ if(e.key==="ArrowRight") moveRight=false;
+ if(e.key===" ") nitro=false;
+});
+
+function setBtn(id,dir){
+ const b=document.getElementById(id);
+ b.addEventListener("touchstart",()=>{dir==="L"?moveLeft=true:moveRight=true});
+ b.addEventListener("touchend",()=>{dir==="L"?moveLeft=false:moveRight=false});
+}
+setBtn("leftBtn","L");
+setBtn("rightBtn","R");
+
+/* BUILDINGS */
+let buildings=[];
+for(let i=0;i<12;i++){
+ buildings.push({
+   x:i*35,
+   w:30,
+   h:100+Math.random()*120
+ });
+}
+
+function reset(){
+ player={x:180,y:480,w:40,h:80};
+ obstacles=[];
+ speed=5;
+ score=0;
+ level=1;
+ gameOver=false;
+}
+
+function startGame(selectedMode){
+ mode=selectedMode;
+
+ document.getElementById("menu").style.display="none";
+ document.getElementById("controls").style.display="block";
+ canvas.style.display="block";
+
+ reset();
+
+ /* SOUND start setelah klik */
+ bgMusic.currentTime=0;
+ engineSound.currentTime=0;
+
+ bgMusic.play();
+ engineSound.play();
+
+ if(animationId) cancelAnimationFrame(animationId);
+ update();
+}
+
+/* SKY */
+function drawSky(){
+ ctx.fillStyle = mode==="day" ? "#4ec9ff" : "#001a33";
+ ctx.fillRect(0,0,400,300);
+}
+
+/* CITY */
+let cityOffset=0;
+function drawCity(){
+ ctx.fillStyle="#222";
+ buildings.forEach(b=>{
+   let x=(b.x - cityOffset)%400;
+   if(x< -40) x+=400;
+   ctx.fillRect(x,300-b.h,b.w,b.h);
+ });
+ cityOffset += speed*0.3;
+}
+
+/* ROAD */
+let roadOffset=0;
+function drawRoad(){
+ ctx.fillStyle="gray";
+ ctx.beginPath();
+ ctx.moveTo(80,600);
+ ctx.lineTo(320,600);
+ ctx.lineTo(260,300);
+ ctx.lineTo(140,300);
+ ctx.closePath();
+ ctx.fill();
+
+ ctx.fillStyle="white";
+ for(let i=0;i<15;i++){
+   let y=(i*40+roadOffset)%300+300;
+   let scale=1-((y-300)/300);
+   ctx.fillRect(200-scale*6,y,scale*12,20);
+ }
+ roadOffset += speed + (nitro?3:0);
+}
+
+/* CAR */
+function drawCar(x,y,color){
+ ctx.fillStyle=color;
+ ctx.fillRect(x,y,40,80);
+ ctx.fillStyle="black";
+ ctx.fillRect(x+5,y+10,30,20);
+}
+
+/* OBSTACLE */
+function createObstacle(){
+ if(gameOver) return;
+ let lane=[140,180,220];
+ let x=lane[Math.floor(Math.random()*lane.length)];
+ obstacles.push({x:x,y:-80,w:40,h:80});
+}
+setInterval(createObstacle,1500);
+
+function drawObstacles(){
+ obstacles.forEach(o=>{
+   o.y+=speed;
+   drawCar(o.x,o.y,"red");
+
+   if(player.x<o.x+o.w &&
+      player.x+player.w>o.x &&
+      player.y<o.y+o.h &&
+      player.y+player.h>o.y){
+       crash();
+   }
+ });
+ obstacles=obstacles.filter(o=>o.y<700);
+}
+
+/* CRASH */
+function crash(){
+ if(gameOver) return;
+ gameOver=true;
+
+ crashSound.currentTime=0;
+ crashSound.play();
+
+ bgMusic.pause();
+ engineSound.pause();
+}
+
+/* LOOP */
+function update(){
+ ctx.clearRect(0,0,400,600);
+
+ if(gameOver){
+   ctx.fillStyle="orange";
+   ctx.beginPath();
+   ctx.arc(player.x+20,player.y+40,50,0,Math.PI*2);
+   ctx.fill();
+
+   ctx.fillStyle="white";
+   ctx.font="40px Arial";
+   ctx.fillText("GAME OVER",80,300);
+   ctx.font="20px Arial";
+   ctx.fillText("Tap untuk Restart",110,340);
+
+   canvas.onclick=()=>{
+     canvas.onclick=null;
+     bgMusic.play();
+     engineSound.play();
+     reset();
+     update();
+   };
+   return;
+ }
+
+ drawSky();
+ drawCity();
+ drawRoad();
+
+ if(moveLeft && player.x>110) player.x-=6;
+ if(moveRight && player.x<250) player.x+=6;
+
+ drawCar(player.x,player.y,"cyan");
+ drawObstacles();
+
+ score++;
+ if(score%2000===0){
+   level++;
+   speed+=0.5;
+ }
+
+ ctx.fillStyle="white";
+ ctx.font="16px Arial";
+ ctx.fillText("Skor: "+score,10,20);
+ ctx.fillText("Level: "+level,10,40);
+
+ animationId=requestAnimationFrame(update);
+}
+</script>
+</body>
+</html>
